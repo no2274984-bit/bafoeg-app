@@ -13,7 +13,7 @@ def home():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>BAföG KI Assistent</title>
+        <title>BAföG Assistent</title>
         <style>
             body {
                 font-family: Arial;
@@ -54,7 +54,7 @@ def home():
 
         <h1>BAföG Assistent</h1>
 
-        <p>Erstelle automatisch einen Antragstext in Sekunden.</p>
+        <p>Erstelle einen professionellen Antragstext für dein BAföG.</p>
 
         <form action="/submit" method="post">
 
@@ -64,13 +64,13 @@ def home():
 
             <input name="job" placeholder="Nebenjob (ja/nein)">
             <input name="income" placeholder="Monatliches Einkommen">
-            <input name="living" placeholder="Wohnsituation">
+            <input name="living" placeholder="Wohnsituation (bei Eltern / allein / WG)">
 
-            <button type="submit">Antrag generieren</button>
+            <button type="submit">Antrag erstellen</button>
         </form>
 
         <p class="note">
-            Hinweis: Dieses Tool ersetzt keine offizielle Beratung.
+            Hinweis: Dieses Tool ersetzt keine offizielle BAföG-Beratung.
         </p>
 
     </body>
@@ -79,7 +79,7 @@ def home():
 
 
 # ----------------------------
-# FORM HANDLING (OHNE KI)
+# FORM HANDLING (PROFESSIONELL OHNE KI)
 # ----------------------------
 @app.route("/submit", methods=["POST"])
 def submit():
@@ -93,29 +93,49 @@ def submit():
         "living": request.form.get("living") or "nicht angegeben",
     }
 
-    # Pflichtcheck
+    # Pflichtfelder prüfen
     if not data["age"] or not data["study"] or not data["semester"]:
-        return "<h2>Bitte Pflichtfelder ausfüllen (Alter, Studium, Semester)</h2>"
+        return "<h2>Bitte füllen Sie alle Pflichtfelder (Alter, Studium, Semester) aus.</h2>"
 
-    # 🧠 Automatisch generierter Antrag (ohne KI)
+    # ----------------------------
+    # INTELLIGENTE TEXTLOGIK (OHNE KI)
+    # ----------------------------
+
+    income_text = (
+        f"Der Antragsteller erzielt ein monatliches Einkommen von {data['income']} Euro."
+        if data["income"] != "nicht angegeben"
+        else "Es wurde kein Einkommen angegeben."
+    )
+
+    job_text = (
+        "Es wird ein Nebenjob ausgeübt."
+        if data["job"].lower() == "ja"
+        else "Es wird kein Nebenjob ausgeübt."
+    )
+
+    living_text = f"Die Wohnsituation lautet: {data['living']}."
+
+    # Professioneller Antragstext
     result = f"""
-BAföG-Antrag (automatisch erstellt)
+BAföG-ANTRAG – AUTOMATISCH ERSTELLTE ZUSAMMENFASSUNG
 
-Persönliche Angaben:
-- Alter: {data["age"]}
-- Studiengang: {data["study"]}
-- Semester: {data["semester"]}
+1. Persönliche Angaben
+Der Antragsteller ist {data["age"]} Jahre alt und studiert {data["study"]} im {data["semester"]}. Semester.
 
-Finanzielle Situation:
-- Nebenjob: {data["job"]}
-- Monatliches Einkommen: {data["income"]}
+2. Studium
+Derzeit wird ein Studium im Bereich {data["study"]} absolviert.
 
-Wohnsituation:
-- {data["living"]}
+3. Finanzielle Situation
+{job_text}
+{income_text}
 
-Hinweis:
-Dieser Antrag wurde automatisch erstellt und dient nur als Orientierung.
-Bitte prüfen Sie alle Angaben vor der Abgabe.
+4. Wohnsituation
+{living_text}
+
+5. Erklärung
+Diese Zusammenfassung wurde automatisch erstellt und dient als strukturierte Übersicht für den BAföG-Antrag.
+
+Alle Angaben sind vor Abgabe eigenständig zu prüfen und gegebenenfalls zu korrigieren.
 """
 
     return f"""
@@ -126,7 +146,7 @@ Bitte prüfen Sie alle Angaben vor der Abgabe.
         <style>
             body {{
                 font-family: Arial;
-                max-width: 700px;
+                max-width: 750px;
                 margin: 40px auto;
             }}
 
@@ -134,6 +154,7 @@ Bitte prüfen Sie alle Angaben vor der Abgabe.
                 background: #f4f4f4;
                 padding: 20px;
                 white-space: pre-wrap;
+                line-height: 1.5;
             }}
 
             a {{
@@ -157,7 +178,7 @@ Bitte prüfen Sie alle Angaben vor der Abgabe.
 
 
 # ----------------------------
-# START SERVER (RENDER READY)
+# START (RENDER READY)
 # ----------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
