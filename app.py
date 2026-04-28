@@ -61,23 +61,13 @@ def home():
 
         <form action="/submit" method="post">
 
-            <label>Alter *</label>
-            <input name="age" required>
+            <input name="age" placeholder="Alter *" required>
+            <input name="study" placeholder="Studiengang *" required>
+            <input name="semester" placeholder="Semester *" required>
 
-            <label>Studiengang *</label>
-            <input name="study" required>
-
-            <label>Semester *</label>
-            <input name="semester" required>
-
-            <label>Nebenjob (ja/nein)</label>
-            <input name="job">
-
-            <label>Monatliches Einkommen</label>
-            <input name="income">
-
-            <label>Wohnsituation</label>
-            <input name="living">
+            <input name="job" placeholder="Nebenjob (ja/nein)">
+            <input name="income" placeholder="Monatliches Einkommen">
+            <input name="living" placeholder="Wohnsituation">
 
             <button type="submit">Antrag generieren</button>
         </form>
@@ -97,43 +87,41 @@ def home():
 @app.route("/submit", methods=["POST"])
 def submit():
 
-    # Daten sammeln
-    answers = {
-        "age": request.form.get("age"),
-        "study": request.form.get("study"),
-        "semester": request.form.get("semester"),
-        "job": request.form.get("job") or "nicht angegeben",
-        "income": request.form.get("income") or "nicht angegeben",
-        "living": request.form.get("living") or "nicht angegeben",
-    }
+    try:
+        data = {
+            "age": request.form.get("age"),
+            "study": request.form.get("study"),
+            "semester": request.form.get("semester"),
+            "job": request.form.get("job") or "nicht angegeben",
+            "income": request.form.get("income") or "nicht angegeben",
+            "living": request.form.get("living") or "nicht angegeben",
+        }
 
-    # Minimal-Validation
-    if not answers["age"] or not answers["study"] or not answers["semester"]:
-        return "<h2>Bitte alle Pflichtfelder (Alter, Studium, Semester) ausfüllen.</h2>"
+        # Pflichtfelder check
+        if not data["age"] or not data["study"] or not data["semester"]:
+            return "<h2>Bitte Pflichtfelder ausfüllen</h2>"
 
-    # 🧠 Stabiler Prompt
-    prompt = f"""
+        prompt = f"""
 Du bist ein erfahrener Sachbearbeiter für BAföG-Anträge in Deutschland.
 
-Erstelle aus den folgenden Informationen einen offiziellen, sachlichen Antragstext.
+Erstelle einen offiziellen, sachlichen Antragstext.
 
-REGELN:
-- keine Annahmen oder Erfindungen
-- nur vorhandene Daten verwenden
+Regeln:
+- nur echte Daten verwenden
+- nichts erfinden
 - fehlende Infos neutral erwähnen
-- klare, formale Amtssprache
-- gut strukturierte Absätze
+- klare Amtssprache
+- strukturierte Absätze
 
-DATEN:
-Alter: {answers["age"]}
-Studiengang: {answers["study"]}
-Semester: {answers["semester"]}
-Nebenjob: {answers["job"]}
-Einkommen: {answers["income"]}
-Wohnsituation: {answers["living"]}
+Daten:
+Alter: {data["age"]}
+Studiengang: {data["study"]}
+Semester: {data["semester"]}
+Nebenjob: {data["job"]}
+Einkommen: {data["income"]}
+Wohnsituation: {data["living"]}
 """
 
-    try:
         response = client.chat.completions.create(
             model="gpt-4.1",
             messages=[{"role": "user", "content": prompt}],
@@ -142,51 +130,50 @@ Wohnsituation: {answers["living"]}
 
         result = response.choices[0].message.content
 
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Ergebnis</title>
+            <style>
+                body {{
+                    font-family: Arial;
+                    max-width: 700px;
+                    margin: 40px auto;
+                }}
+
+                pre {{
+                    background: #f4f4f4;
+                    padding: 20px;
+                    white-space: pre-wrap;
+                }}
+
+                a {{
+                    display: inline-block;
+                    margin-top: 20px;
+                }}
+            </style>
+        </head>
+
+        <body>
+
+            <h1>Dein BAföG Antrag</h1>
+
+            <pre>{result}</pre>
+
+            <a href="/">← Zurück</a>
+
+        </body>
+        </html>
+        """
+
     except Exception as e:
-        return f"<h2>Fehler bei der KI-Anfrage:</h2><p>{str(e)}</p>"
-
-    # Ergebnisseite
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Ergebnis</title>
-        <style>
-            body {{
-                font-family: Arial;
-                max-width: 700px;
-                margin: 40px auto;
-            }}
-
-            pre {{
-                background: #f4f4f4;
-                padding: 20px;
-                white-space: pre-wrap;
-            }}
-
-            a {{
-                display: inline-block;
-                margin-top: 20px;
-            }}
-        </style>
-    </head>
-
-    <body>
-
-        <h1>Dein BAföG Antrag</h1>
-
-        <pre>{result}</pre>
-
-        <a href="/">← Zurück</a>
-
-    </body>
-    </html>
-    """
+        return f"<h2>Fehler:</h2><p>{str(e)}</p>"
 
 
 # ----------------------------
-# START SERVER
+# START (WICHTIG FÜR RENDER)
 # ----------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=False)
