@@ -1,10 +1,7 @@
 from flask import Flask, request
-from openai import OpenAI
 import os
 
 app = Flask(__name__)
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 # ----------------------------
@@ -55,9 +52,9 @@ def home():
 
     <body>
 
-        <h1>BAföG KI Assistent</h1>
+        <h1>BAföG Assistent</h1>
 
-        <p>Erstelle automatisch einen offiziellen Antragstext in Sekunden.</p>
+        <p>Erstelle automatisch einen Antragstext in Sekunden.</p>
 
         <form action="/submit" method="post">
 
@@ -82,97 +79,85 @@ def home():
 
 
 # ----------------------------
-# FORM HANDLING
+# FORM HANDLING (OHNE KI)
 # ----------------------------
 @app.route("/submit", methods=["POST"])
 def submit():
 
-    try:
-        data = {
-            "age": request.form.get("age"),
-            "study": request.form.get("study"),
-            "semester": request.form.get("semester"),
-            "job": request.form.get("job") or "nicht angegeben",
-            "income": request.form.get("income") or "nicht angegeben",
-            "living": request.form.get("living") or "nicht angegeben",
-        }
+    data = {
+        "age": request.form.get("age"),
+        "study": request.form.get("study"),
+        "semester": request.form.get("semester"),
+        "job": request.form.get("job") or "nicht angegeben",
+        "income": request.form.get("income") or "nicht angegeben",
+        "living": request.form.get("living") or "nicht angegeben",
+    }
 
-        # Pflichtfelder check
-        if not data["age"] or not data["study"] or not data["semester"]:
-            return "<h2>Bitte Pflichtfelder ausfüllen</h2>"
+    # Pflichtcheck
+    if not data["age"] or not data["study"] or not data["semester"]:
+        return "<h2>Bitte Pflichtfelder ausfüllen (Alter, Studium, Semester)</h2>"
 
-        prompt = f"""
-Du bist ein erfahrener Sachbearbeiter für BAföG-Anträge in Deutschland.
+    # 🧠 Automatisch generierter Antrag (ohne KI)
+    result = f"""
+BAföG-Antrag (automatisch erstellt)
 
-Erstelle einen offiziellen, sachlichen Antragstext.
+Persönliche Angaben:
+- Alter: {data["age"]}
+- Studiengang: {data["study"]}
+- Semester: {data["semester"]}
 
-Regeln:
-- nur echte Daten verwenden
-- nichts erfinden
-- fehlende Infos neutral erwähnen
-- klare Amtssprache
-- strukturierte Absätze
+Finanzielle Situation:
+- Nebenjob: {data["job"]}
+- Monatliches Einkommen: {data["income"]}
 
-Daten:
-Alter: {data["age"]}
-Studiengang: {data["study"]}
-Semester: {data["semester"]}
-Nebenjob: {data["job"]}
-Einkommen: {data["income"]}
-Wohnsituation: {data["living"]}
+Wohnsituation:
+- {data["living"]}
+
+Hinweis:
+Dieser Antrag wurde automatisch erstellt und dient nur als Orientierung.
+Bitte prüfen Sie alle Angaben vor der Abgabe.
 """
 
-        response = client.chat.completions.create(
-            model="gpt-4.1",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2
-        )
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Ergebnis</title>
+        <style>
+            body {{
+                font-family: Arial;
+                max-width: 700px;
+                margin: 40px auto;
+            }}
 
-        result = response.choices[0].message.content
+            pre {{
+                background: #f4f4f4;
+                padding: 20px;
+                white-space: pre-wrap;
+            }}
 
-        return f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Ergebnis</title>
-            <style>
-                body {{
-                    font-family: Arial;
-                    max-width: 700px;
-                    margin: 40px auto;
-                }}
+            a {{
+                display: inline-block;
+                margin-top: 20px;
+            }}
+        </style>
+    </head>
 
-                pre {{
-                    background: #f4f4f4;
-                    padding: 20px;
-                    white-space: pre-wrap;
-                }}
+    <body>
 
-                a {{
-                    display: inline-block;
-                    margin-top: 20px;
-                }}
-            </style>
-        </head>
+        <h1>Dein BAföG Antrag</h1>
 
-        <body>
+        <pre>{result}</pre>
 
-            <h1>Dein BAföG Antrag</h1>
+        <a href="/">← Zurück</a>
 
-            <pre>{result}</pre>
-
-            <a href="/">← Zurück</a>
-
-        </body>
-        </html>
-        """
-
-    except Exception as e:
-        return f"<h2>Fehler:</h2><p>{str(e)}</p>"
+    </body>
+    </html>
+    """
 
 
 # ----------------------------
-# START (WICHTIG FÜR RENDER)
+# START SERVER (RENDER READY)
 # ----------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
