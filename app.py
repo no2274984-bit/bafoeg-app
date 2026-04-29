@@ -7,7 +7,7 @@ app = Flask(__name__)
 # ----------------------------
 # SECURITY
 # ----------------------------
-app.secret_key = "change-this-secret-key"
+app.secret_key = "change-this-secret-key-immediately"
 
 # ----------------------------
 # DATABASE (Render safe)
@@ -20,10 +20,10 @@ db = SQLAlchemy(app)
 
 
 # ----------------------------
-# ADMIN ACCOUNT (FIX ANGELEGT)
+# ADMIN ACCOUNT
 # ----------------------------
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin123"   # <-- HIER später ändern!
+ADMIN_PASSWORD = "admin123"
 
 
 # ----------------------------
@@ -39,7 +39,7 @@ class Foerderung(db.Model):
 
 
 # ----------------------------
-# INIT DB
+# INIT DB SAFELY
 # ----------------------------
 with app.app_context():
     db.create_all()
@@ -50,7 +50,7 @@ with app.app_context():
             beschreibung="Studienförderung für Studierende",
             voraussetzungen="Studium;Einkommen niedrig",
             zielgruppe="student",
-            hoehe="bis 934€"
+            hoehe="bis 934€ monatlich"
         ))
         db.session.commit()
 
@@ -74,8 +74,8 @@ def login():
     return """
     <h2>Admin Login</h2>
     <form method="post">
-        <input name="username" placeholder="Username"><br><br>
-        <input name="password" type="password" placeholder="Passwort"><br><br>
+        <input name="username" placeholder="Username" required><br><br>
+        <input name="password" type="password" placeholder="Passwort" required><br><br>
         <button type="submit">Login</button>
     </form>
     """
@@ -128,6 +128,7 @@ def home():
             <h2>{f.name}</h2>
             <p>{f.beschreibung}</p>
             <p><b>Höhe:</b> {f.hoehe}</p>
+
             <b>Voraussetzungen:</b>
             <ul>
         """
@@ -137,7 +138,6 @@ def home():
 
         html += "</ul>"
 
-        # ADMIN DELETE
         if session.get("admin"):
             html += f"""
             <form method="post" action="/delete/{f.id}">
