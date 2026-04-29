@@ -3,10 +3,14 @@ from flask_sqlalchemy import SQLAlchemy
 import os
 
 app = Flask(__name__)
+
+# ----------------------------
+# SECURITY
+# ----------------------------
 app.secret_key = "change-this-secret-key"
 
 # ----------------------------
-# DATABASE
+# DATABASE (Render safe)
 # ----------------------------
 DB_PATH = os.environ.get("DB_PATH", "foerderungen.db")
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
@@ -16,10 +20,10 @@ db = SQLAlchemy(app)
 
 
 # ----------------------------
-# ADMIN LOGIN (EINFACH)
+# ADMIN ACCOUNT (FIX ANGELEGT)
 # ----------------------------
-ADMIN_USER = "admin"
-ADMIN_PASS = "1234"   # <- später ändern!
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "admin123"   # <-- HIER später ändern!
 
 
 # ----------------------------
@@ -43,7 +47,7 @@ with app.app_context():
     if Foerderung.query.count() == 0:
         db.session.add(Foerderung(
             name="BAföG",
-            beschreibung="Studienförderung",
+            beschreibung="Studienförderung für Studierende",
             voraussetzungen="Studium;Einkommen niedrig",
             zielgruppe="student",
             hoehe="bis 934€"
@@ -52,23 +56,23 @@ with app.app_context():
 
 
 # ----------------------------
-# LOGIN PAGE
+# LOGIN
 # ----------------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
 
     if request.method == "POST":
-        user = request.form.get("username")
-        pw = request.form.get("password")
+        username = request.form.get("username")
+        password = request.form.get("password")
 
-        if user == ADMIN_USER and pw == ADMIN_PASS:
+        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
             session["admin"] = True
             return redirect("/")
         else:
-            return "Falscher Login"
+            return "<h3>Falscher Login</h3>"
 
     return """
-    <h2>Login</h2>
+    <h2>Admin Login</h2>
     <form method="post">
         <input name="username" placeholder="Username"><br><br>
         <input name="password" type="password" placeholder="Passwort"><br><br>
@@ -97,7 +101,7 @@ def home():
     html = """
     <html>
     <head>
-        <title>Förderungen</title>
+        <title>Förderungen Plattform</title>
         <style>
             body { font-family: Arial; max-width: 900px; margin: 40px auto; }
             .card { border:1px solid #ddd; padding:15px; margin:10px 0; border-radius:8px; }
@@ -109,25 +113,21 @@ def home():
     <body>
 
     <h1>💸 Förderungen Übersicht</h1>
-
     """
 
     # LOGIN STATUS
     if session.get("admin"):
-        html += '<p>🔐 Admin eingeloggt | <a href="/logout">Logout</a></p>'
+        html += "<p>🔐 Admin eingeloggt | <a href='/logout'>Logout</a></p>"
     else:
-        html += '<a href="/login">Login</a>'
+        html += "<a href='/login'>Admin Login</a>"
 
-    # ----------------------------
     # LISTE
-    # ----------------------------
     for f in items:
         html += f"""
         <div class="card">
             <h2>{f.name}</h2>
             <p>{f.beschreibung}</p>
             <p><b>Höhe:</b> {f.hoehe}</p>
-
             <b>Voraussetzungen:</b>
             <ul>
         """
@@ -137,7 +137,7 @@ def home():
 
         html += "</ul>"
 
-        # ADMIN ACTIONS
+        # ADMIN DELETE
         if session.get("admin"):
             html += f"""
             <form method="post" action="/delete/{f.id}">
@@ -147,9 +147,7 @@ def home():
 
         html += "</div>"
 
-    # ----------------------------
-    # ADD FORM (nur Admin)
-    # ----------------------------
+    # ADD FORM (ADMIN ONLY)
     if session.get("admin"):
         html += """
         <div class="box">
@@ -164,7 +162,6 @@ def home():
                 <input name="hoehe" placeholder="Höhe" required>
 
                 <button type="submit">Speichern</button>
-
             </form>
         </div>
         """
