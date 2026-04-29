@@ -1,11 +1,12 @@
-from flask import Flask, request, redirect
+from flask import Flask, request, redirect, session
 from flask_sqlalchemy import SQLAlchemy
 import os
 
 app = Flask(__name__)
+app.secret_key = "secret-key-change-later"
 
 # ----------------------------
-# DATABASE (RENDER SAFE)
+# DATABASE (Render safe with disk support)
 # ----------------------------
 DB_PATH = os.environ.get("DB_PATH", "foerderungen.db")
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
@@ -19,15 +20,15 @@ db = SQLAlchemy(app)
 # ----------------------------
 class Foerderung(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), nullable=False)
-    beschreibung = db.Column(db.String(300), nullable=False)
-    voraussetzungen = db.Column(db.Text, nullable=False)
-    zielgruppe = db.Column(db.String(100), nullable=False)
-    hoehe = db.Column(db.String(100), nullable=False)
+    name = db.Column(db.String(120))
+    beschreibung = db.Column(db.String(300))
+    voraussetzungen = db.Column(db.Text)
+    zielgruppe = db.Column(db.String(100))
+    hoehe = db.Column(db.String(100))
 
 
 # ----------------------------
-# INIT DB (SAFE)
+# INIT DB
 # ----------------------------
 with app.app_context():
     db.create_all()
@@ -35,98 +36,132 @@ with app.app_context():
     if Foerderung.query.count() == 0:
         db.session.add(Foerderung(
             name="BAföG",
-            beschreibung="Finanzielle Unterstützung für Studierende.",
-            voraussetzungen="Studium;unter 45;geringes Einkommen",
+            beschreibung="Studienförderung",
+            voraussetzungen="Studium;Einkommen niedrig",
             zielgruppe="student",
-            hoehe="bis zu 934€ monatlich"
+            hoehe="bis 934€"
         ))
         db.session.commit()
 
 
 # ----------------------------
-# HOME PAGE
+# HOME + SEARCH + SECRET ADMIN LOGIN
 # ----------------------------
-@app.route("/")
+@app.route("/", methods=["GET", "POST"])
 def home():
-    items = Foerderung.query.all()
+
+    # 🔐 SECRET LOGIN VIA SEARCH
+    if request.method == "POST":
+        search = request.form.get("search")
+
+        if search == "27082007":
+            session["admin"] = True
+            return redirect("/")
+
+    query = Foerderung.query.all()
 
     html = """
     <html>
     <head>
-        <title>Förderungen Plattform</title>
+        <title>Förderungen System</title>
         <style>
             body { font-family: Arial; max-width: 900px; margin: 40px auto; }
             .card { border:1px solid #ddd; padding:15px; margin:10px 0; border-radius:8px; }
-            .box { border:1px solid black; padding:15px; margin-top:30px; }
+            .box { border:1px solid black; padding:15px; margin-top:20px; }
             input { width:100%; padding:10px; margin:5px 0; }
             button { width:100%; padding:12px; background:black; color:white; border:none; }
         </style>
     </head>
     <body>
 
-    <h1>💸 Förderungen Übersicht</h1>
+    <h1>💸 Förderungen</h1>
+
+    <form method="post">
+        <input name="search" placeholder="Suche... (oder Enter für Admin-Code)">
+        <button type="submit">Suchen</button>
+    </form>
     """
 
-    for f in items:
+    # ----------------------------
+    # LISTE
+    # ----------------------------
+    for f in query:
         html += f"""
         <div class="card">
             <h2>{f.name}</h2>
             <p>{f.beschreibung}</p>
             <p><b>Höhe:</b> {f.hoehe}</p>
-            <p><b>Zielgruppe:</b> {f.zielgruppe}</p>
-
-            <b>Voraussetzungen:</b>
-            <ul>
         """
 
-        for v in f.voraussetzungen.split(";"):
-            html += f"<li>{v}</li>"
+        # ADMIN DELETE BUTTON
+        if session.get("admin"):
+            html += f"""
+            <form method="post" action="/delete/{f.id}">
+                <button type="submit" style="background:red;">Löschen</button>
+            </form>
+            """
 
-        html += "</ul></div>"
+        html += "</div>"
 
-    html += """
-    <div class="box">
-        <h2>➕ Förderung hinzufügen</h2>
+    # ----------------------------
+    # ADMIN PANEL
+    # ----------------------------
+    if session.get("admin"):
+        html += """
+        <div class="box">
+            <h2>🔐 Admin Mode</h2>
 
-        <form method="post" action="/add">
+            <form method="post" action="/add">
 
-            <input name="name" placeholder="Name" required>
-            <input name="beschreibung" placeholder="Beschreibung" required>
-            <input name="voraussetzungen" placeholder="Voraussetzungen (; getrennt)" required>
-            <input name="zielgruppe" placeholder="Zielgruppe" required>
-            <input name="hoehe" placeholder="Höhe" required>
+                <input name="name" placeholder="Name" required>
+                <input name="beschreibung" placeholder="Beschreibung" required>
+                <input name="voraussetzungen" placeholder="Voraussetzungen (; getrennt)" required>
+                <input name="zielgruppe" placeholder="Zielgruppe" required>
+                <input name="hoehe" placeholder="Höhe" required>
 
-            <button type="submit">Speichern</button>
+                <button type="submit">Hinzufügen</button>
+            </form>
+        </div>
+        """
 
-        </form>
-    </div>
-
-    </body>
-    </html>
-    """
-
+    html += "</body></html>"
     return html
 
 
 # ----------------------------
-# ADD ROUTE
+# ADD FOERDERUNG
 # ----------------------------
 @app.route("/add", methods=["POST"])
 def add():
-    try:
-        f = Foerderung(
-            name=request.form.get("name"),
-            beschreibung=request.form.get("beschreibung"),
-            voraussetzungen=request.form.get("voraussetzungen"),
-            zielgruppe=request.form.get("zielgruppe"),
-            hoehe=request.form.get("hoehe")
-        )
+    if not session.get("admin"):
+        return "Nicht erlaubt"
 
-        db.session.add(f)
+    f = Foerderung(
+        name=request.form.get("name"),
+        beschreibung=request.form.get("beschreibung"),
+        voraussetzungen=request.form.get("voraussetzungen"),
+        zielgruppe=request.form.get("zielgruppe"),
+        hoehe=request.form.get("hoehe")
+    )
+
+    db.session.add(f)
+    db.session.commit()
+
+    return redirect("/")
+
+
+# ----------------------------
+# DELETE FOERDERUNG
+# ----------------------------
+@app.route("/delete/<int:id>", methods=["POST"])
+def delete(id):
+    if not session.get("admin"):
+        return "Nicht erlaubt"
+
+    f = Foerderung.query.get(id)
+    if f:
+        db.session.delete(f)
         db.session.commit()
-
-    except Exception as e:
-        return f"Fehler beim Speichern: {str(e)}"
 
     return redirect("/")
 
