@@ -5,9 +5,10 @@ import os
 app = Flask(__name__)
 
 # ----------------------------
-# CONFIG
+# DATABASE (RENDER SAFE)
 # ----------------------------
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///foerderungen.db"
+DB_PATH = os.environ.get("DB_PATH", "foerderungen.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
@@ -26,29 +27,24 @@ class Foerderung(db.Model):
 
 
 # ----------------------------
-# SAFE DB INIT (Render-friendly)
+# INIT DB (SAFE)
 # ----------------------------
-def init_db():
-    with app.app_context():
-        db.create_all()
+with app.app_context():
+    db.create_all()
 
-        # nur Demo-Daten wenn leer
-        if Foerderung.query.count() == 0:
-            db.session.add(Foerderung(
-                name="BAföG",
-                beschreibung="Finanzielle Unterstützung für Studierende.",
-                voraussetzungen="Studium;unter 45;geringes Einkommen",
-                zielgruppe="student",
-                hoehe="bis zu 934€ monatlich"
-            ))
-            db.session.commit()
-
-
-init_db()
+    if Foerderung.query.count() == 0:
+        db.session.add(Foerderung(
+            name="BAföG",
+            beschreibung="Finanzielle Unterstützung für Studierende.",
+            voraussetzungen="Studium;unter 45;geringes Einkommen",
+            zielgruppe="student",
+            hoehe="bis zu 934€ monatlich"
+        ))
+        db.session.commit()
 
 
 # ----------------------------
-# HOME
+# HOME PAGE
 # ----------------------------
 @app.route("/")
 def home():
@@ -88,9 +84,6 @@ def home():
 
         html += "</ul></div>"
 
-    # ----------------------------
-    # ADD FORM (kein /admin nötig)
-    # ----------------------------
     html += """
     <div class="box">
         <h2>➕ Förderung hinzufügen</h2>
@@ -100,7 +93,7 @@ def home():
             <input name="name" placeholder="Name" required>
             <input name="beschreibung" placeholder="Beschreibung" required>
             <input name="voraussetzungen" placeholder="Voraussetzungen (; getrennt)" required>
-            <input name="zielgruppe" placeholder="Zielgruppe (student, azubi, familie)" required>
+            <input name="zielgruppe" placeholder="Zielgruppe" required>
             <input name="hoehe" placeholder="Höhe" required>
 
             <button type="submit">Speichern</button>
@@ -121,7 +114,7 @@ def home():
 @app.route("/add", methods=["POST"])
 def add():
     try:
-        new_f = Foerderung(
+        f = Foerderung(
             name=request.form.get("name"),
             beschreibung=request.form.get("beschreibung"),
             voraussetzungen=request.form.get("voraussetzungen"),
@@ -129,17 +122,17 @@ def add():
             hoehe=request.form.get("hoehe")
         )
 
-        db.session.add(new_f)
+        db.session.add(f)
         db.session.commit()
 
     except Exception as e:
-        return f"Fehler: {str(e)}"
+        return f"Fehler beim Speichern: {str(e)}"
 
     return redirect("/")
 
 
 # ----------------------------
-# START (IMPORTANT FOR RENDER)
+# START
 # ----------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
