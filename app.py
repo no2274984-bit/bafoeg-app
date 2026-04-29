@@ -1,176 +1,114 @@
-from flask import Flask, request
+from flask import Flask, request, send_file
 import os
+from markupsafe import escape
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+import io
 
 app = Flask(__name__)
 
 
 # ----------------------------
-# HOME PAGE
+# HOME
 # ----------------------------
 @app.route("/")
 def home():
     return """
-    <!DOCTYPE html>
     <html>
     <head>
         <title>BAföG Assistent</title>
         <style>
-            body {
-                font-family: Arial;
-                max-width: 650px;
-                margin: 50px auto;
-                padding: 20px;
-            }
-
-            input {
-                width: 100%;
-                padding: 10px;
-                margin: 6px 0;
-            }
-
-            button {
-                width: 100%;
-                padding: 12px;
-                background: black;
-                color: white;
-                border: none;
-                cursor: pointer;
-                margin-top: 10px;
-            }
-
-            button:hover {
-                background: #333;
-            }
-
-            .note {
-                font-size: 12px;
-                color: gray;
-                margin-top: 20px;
-            }
+            body { font-family: Arial; max-width: 650px; margin: 50px auto; }
+            input { width: 100%; padding: 10px; margin: 6px 0; }
+            button { width: 100%; padding: 12px; background: black; color: white; border: none; }
         </style>
     </head>
-
     <body>
 
         <h1>BAföG Assistent</h1>
 
-        <p>Erstelle einen professionellen Antragstext für dein BAföG.</p>
-
         <form action="/submit" method="post">
-
             <input name="age" placeholder="Alter *" required>
             <input name="study" placeholder="Studiengang *" required>
             <input name="semester" placeholder="Semester *" required>
 
             <input name="job" placeholder="Nebenjob (ja/nein)">
-            <input name="income" placeholder="Monatliches Einkommen">
-            <input name="living" placeholder="Wohnsituation (bei Eltern / allein / WG)">
+            <input name="income" placeholder="Einkommen (€)">
+            <input name="living" placeholder="Wohnsituation">
 
             <button type="submit">Antrag erstellen</button>
         </form>
 
-        <p class="note">
-            Hinweis: Dieses Tool ersetzt keine offizielle BAföG-Beratung.
-        </p>
-
     </body>
     </html>
     """
 
 
 # ----------------------------
-# FORM HANDLING (PROFESSIONELL OHNE KI)
+# SUBMIT
 # ----------------------------
 @app.route("/submit", methods=["POST"])
 def submit():
 
-    data = {
-        "age": request.form.get("age"),
-        "study": request.form.get("study"),
-        "semester": request.form.get("semester"),
-        "job": request.form.get("job") or "nicht angegeben",
-        "income": request.form.get("income") or "nicht angegeben",
-        "living": request.form.get("living") or "nicht angegeben",
-    }
+    age = request.form.get("age")
+    study = request.form.get("study")
+    semester = request.form.get("semester")
+    job = (request.form.get("job") or "").lower()
+    income = request.form.get("income") or ""
+    living = request.form.get("living") or "nicht angegeben"
 
-    # Pflichtfelder prüfen
-    if not data["age"] or not data["study"] or not data["semester"]:
-        return "<h2>Bitte füllen Sie alle Pflichtfelder (Alter, Studium, Semester) aus.</h2>"
+    if not age or not study or not semester:
+        return "Pflichtfelder fehlen"
 
-    # ----------------------------
-    # INTELLIGENTE TEXTLOGIK (OHNE KI)
-    # ----------------------------
+    try:
+        age = int(age)
+    except:
+        return "Alter muss Zahl sein"
 
-    income_text = (
-        f"Der Antragsteller erzielt ein monatliches Einkommen von {data['income']} Euro."
-        if data["income"] != "nicht angegeben"
-        else "Es wurde kein Einkommen angegeben."
-    )
+    job_text = "Nebenjob: Ja" if job in ["ja", "yes"] else "Nebenjob: Nein"
 
-    job_text = (
-        "Es wird ein Nebenjob ausgeübt."
-        if data["job"].lower() == "ja"
-        else "Es wird kein Nebenjob ausgeübt."
-    )
+    if income:
+        try:
+            income_val = float(income.replace(",", "."))
+            income_text = f"Einkommen: {income_val:.2f} €"
+        except:
+            return "Einkommen ungültig"
+    else:
+        income_text = "Kein Einkommen angegeben"
 
-    living_text = f"Die Wohnsituation lautet: {data['living']}."
-
-    # Professioneller Antragstext
     result = f"""
-BAföG-ANTRAG – AUTOMATISCH ERSTELLTE ZUSAMMENFASSUNG
+BAföG ANTRAG
 
-1. Persönliche Angaben
-Der Antragsteller ist {data["age"]} Jahre alt und studiert {data["study"]} im {data["semester"]}. Semester.
+Alter: {age}
+Studium: {study}
+Semester: {semester}
 
-2. Studium
-Derzeit wird ein Studium im Bereich {data["study"]} absolviert.
-
-3. Finanzielle Situation
 {job_text}
 {income_text}
 
-4. Wohnsituation
-{living_text}
-
-5. Erklärung
-Diese Zusammenfassung wurde automatisch erstellt und dient als strukturierte Übersicht für den BAföG-Antrag.
-
-Alle Angaben sind vor Abgabe eigenständig zu prüfen und gegebenenfalls zu korrigieren.
+Wohnsituation: {living}
 """
 
+    safe_result = escape(result)
+
+    # Übergabe an Download via Query (einfach & stateless)
+    import urllib.parse
+    encoded = urllib.parse.quote(result)
+
     return f"""
-    <!DOCTYPE html>
     <html>
-    <head>
-        <title>Ergebnis</title>
-        <style>
-            body {{
-                font-family: Arial;
-                max-width: 750px;
-                margin: 40px auto;
-            }}
+    <body style="font-family: Arial; max-width: 700px; margin: 40px auto;">
 
-            pre {{
-                background: #f4f4f4;
-                padding: 20px;
-                white-space: pre-wrap;
-                line-height: 1.5;
-            }}
+        <h2>Dein Antrag</h2>
 
-            a {{
-                display: inline-block;
-                margin-top: 20px;
-            }}
-        </style>
-    </head>
+        <pre>{safe_result}</pre>
 
-    <body>
+        <a href="/download?data={encoded}">
+            <button>📄 Als PDF herunterladen</button>
+        </a>
 
-        <h1>Dein BAföG Antrag</h1>
-
-        <pre>{result}</pre>
-
-        <a href="/">← Zurück</a>
+        <br><br>
+        <a href="/">Zurück</a>
 
     </body>
     </html>
@@ -178,8 +116,34 @@ Alle Angaben sind vor Abgabe eigenständig zu prüfen und gegebenenfalls zu korr
 
 
 # ----------------------------
-# START (RENDER READY)
+# DOWNLOAD (IN MEMORY)
+# ----------------------------
+@app.route("/download")
+def download():
+    data = request.args.get("data", "")
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+
+    y = 800
+    for line in data.split("\n"):
+        c.drawString(50, y, line)
+        y -= 20
+
+    c.save()
+    buffer.seek(0)
+
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name="bafoeg_antrag.pdf",
+        mimetype="application/pdf"
+    )
+
+
+# ----------------------------
+# START
 # ----------------------------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    port = int(os.environ.get("PORT", 10000))  # Render nutzt oft 10000
+    app.run(host="0.0.0.0", port=port)
