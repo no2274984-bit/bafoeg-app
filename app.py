@@ -1,11 +1,11 @@
-from flask import Flask, request
+from flask import Flask, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 import os
 
 app = Flask(__name__)
 
 # ----------------------------
-# DATABASE SETUP
+# DATABASE
 # ----------------------------
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///foerderungen.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -18,7 +18,7 @@ db = SQLAlchemy(app)
 # ----------------------------
 class Foerderung(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100))
+    name = db.Column(db.String(120))
     beschreibung = db.Column(db.String(300))
     voraussetzungen = db.Column(db.Text)
     zielgruppe = db.Column(db.String(100))
@@ -26,80 +26,69 @@ class Foerderung(db.Model):
 
 
 # ----------------------------
-# INIT DB + SAMPLE DATA
+# INIT DB
 # ----------------------------
 @app.before_first_request
 def setup():
     db.create_all()
 
     if Foerderung.query.count() == 0:
-
-        sample = [
-            Foerderung(
-                name="BAföG",
-                beschreibung="Finanzielle Unterstützung für Studierende.",
-                voraussetzungen="Studium;unter 45;geringes Einkommen",
-                zielgruppe="student",
-                hoehe="Bis 934€ monatlich"
-            ),
-            Foerderung(
-                name="Wohngeld",
-                beschreibung="Zuschuss zur Miete.",
-                voraussetzungen="eigene Wohnung;geringes Einkommen",
-                zielgruppe="alle",
-                hoehe="abhängig von Einkommen"
-            ),
-            Foerderung(
-                name="Kindergeld",
-                beschreibung="Unterstützung für Familien.",
-                voraussetzungen="unter 25",
-                zielgruppe="familie",
-                hoehe="250€ monatlich"
-            )
-        ]
-
-        db.session.add_all(sample)
+        demo = Foerderung(
+            name="BAföG",
+            beschreibung="Finanzielle Unterstützung für Studierende.",
+            voraussetzungen="Studium;unter 45;geringes Einkommen",
+            zielgruppe="student",
+            hoehe="bis 934€ monatlich"
+        )
+        db.session.add(demo)
         db.session.commit()
 
 
 # ----------------------------
-# HOME PAGE (LISTE AUS DB)
+# HOME
 # ----------------------------
 @app.route("/")
 def home():
 
-    foerderungen = Foerderung.query.all()
+    items = Foerderung.query.all()
 
     html = """
     <html>
     <head>
-        <title>Förderungen DB System</title>
+        <title>Förderungen System</title>
         <style>
             body { font-family: Arial; max-width: 900px; margin: 40px auto; }
             .card { border:1px solid #ccc; padding:15px; margin:10px 0; border-radius:8px; }
+            a.button {
+                display:inline-block;
+                padding:10px;
+                background:black;
+                color:white;
+                text-decoration:none;
+                margin-bottom:20px;
+            }
         </style>
     </head>
     <body>
 
-    <h1>💸 Förderungen Datenbank</h1>
-    <p>Alle Förderungen werden aus der Datenbank geladen.</p>
+    <h1>💸 Förderungen Übersicht</h1>
+
+    <a class="button" href="/admin">➕ Neue Förderung hinzufügen</a>
     """
 
-    for f in foerderungen:
-
-        voraus = f.voraussetzungen.split(";")
-
+    for f in items:
         html += f"""
         <div class="card">
             <h2>{f.name}</h2>
             <p>{f.beschreibung}</p>
             <p><b>Höhe:</b> {f.hoehe}</p>
+            <p><b>Zielgruppe:</b> {f.zielgruppe}</p>
 
             <p><b>Voraussetzungen:</b></p>
             <ul>
         """
 
-        for v in voraus:
+        for v in f.voraussetzungen.split(";"):
             html += f"<li>{v}</li>"
 
         html += "</ul></div>"
@@ -110,25 +99,63 @@ def home():
 
 
 # ----------------------------
-# ADD FOERDERUNG (für später Admin)
+# ADMIN PAGE
+# ----------------------------
+@app.route("/admin")
+def admin():
+    return """
+    <html>
+    <head>
+        <title>Admin Panel</title>
+        <style>
+            body { font-family: Arial; max-width:600px; margin:40px auto; }
+            input { width:100%; padding:10px; margin:5px 0; }
+            button { width:100%; padding:12px; background:black; color:white; }
+        </style>
+    </head>
+
+    <body>
+
+        <h1>➕ Förderung hinzufügen</h1>
+
+        <form action="/add" method="post">
+
+            <input name="name" placeholder="Name" required>
+            <input name="beschreibung" placeholder="Beschreibung" required>
+            <input name="voraussetzungen" placeholder="Voraussetzungen (mit ; trennen)" required>
+            <input name="zielgruppe" placeholder="Zielgruppe (student/azubi/etc)" required>
+            <input name="hoehe" placeholder="Höhe" required>
+
+            <button type="submit">Speichern</button>
+
+        </form>
+
+        <br>
+        <a href="/">← Zurück</a>
+
+    </body>
+    </html>
+    """
+
+
+# ----------------------------
+# ADD (SAVE TO DB)
 # ----------------------------
 @app.route("/add", methods=["POST"])
 def add():
 
-    data = request.json
-
     f = Foerderung(
-        name=data["name"],
-        beschreibung=data["beschreibung"],
-        voraussetzungen=";".join(data["voraussetzungen"]),
-        zielgruppe=data["zielgruppe"],
-        hoehe=data["hoehe"]
+        name=request.form.get("name"),
+        beschreibung=request.form.get("beschreibung"),
+        voraussetzungen=request.form.get("voraussetzungen"),
+        zielgruppe=request.form.get("zielgruppe"),
+        hoehe=request.form.get("hoehe")
     )
 
     db.session.add(f)
     db.session.commit()
 
-    return {"status": "ok"}
+    return redirect("/")
 
 
 # ----------------------------
