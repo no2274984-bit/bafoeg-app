@@ -1,122 +1,105 @@
-from flask import Flask
+from flask import Flask, request
+from flask_sqlalchemy import SQLAlchemy
 import os
 
 app = Flask(__name__)
 
 # ----------------------------
-# DATEN MIT TAGS
+# DATABASE SETUP
 # ----------------------------
-foerderungen = [
-    {
-        "name": "BAföG",
-        "beschreibung": "Finanzielle Unterstützung für Studierende.",
-        "zielgruppe": ["student"],
-        "voraussetzungen": [
-            "Im Studium oder schulischer Ausbildung",
-            "Unter 45 Jahre",
-            "Geringes Einkommen"
-        ],
-        "hoehe": "Bis zu 934€ monatlich"
-    },
-    {
-        "name": "Wohngeld",
-        "beschreibung": "Zuschuss zur Miete.",
-        "zielgruppe": ["alle"],
-        "voraussetzungen": [
-            "Eigene Wohnung",
-            "Geringes Einkommen"
-        ],
-        "hoehe": "Abhängig von Einkommen"
-    },
-    {
-        "name": "Kindergeld",
-        "beschreibung": "Monatliche Zahlung für Familien.",
-        "zielgruppe": ["familie"],
-        "voraussetzungen": [
-            "Unter 25 Jahre (bei Ausbildung)",
-        ],
-        "hoehe": "250€ monatlich"
-    },
-    {
-        "name": "Aufstiegs-BAföG",
-        "beschreibung": "Förderung für berufliche Weiterbildung.",
-        "zielgruppe": ["azubi", "beruf"],
-        "voraussetzungen": [
-            "Weiterbildung oder Meisterkurs",
-        ],
-        "hoehe": "Zuschuss + Darlehen"
-    }
-]
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///foerderungen.db"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db = SQLAlchemy(app)
 
 
 # ----------------------------
-# HOME
+# MODEL
+# ----------------------------
+class Foerderung(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100))
+    beschreibung = db.Column(db.String(300))
+    voraussetzungen = db.Column(db.Text)
+    zielgruppe = db.Column(db.String(100))
+    hoehe = db.Column(db.String(100))
+
+
+# ----------------------------
+# INIT DB + SAMPLE DATA
+# ----------------------------
+@app.before_first_request
+def setup():
+    db.create_all()
+
+    if Foerderung.query.count() == 0:
+
+        sample = [
+            Foerderung(
+                name="BAföG",
+                beschreibung="Finanzielle Unterstützung für Studierende.",
+                voraussetzungen="Studium;unter 45;geringes Einkommen",
+                zielgruppe="student",
+                hoehe="Bis 934€ monatlich"
+            ),
+            Foerderung(
+                name="Wohngeld",
+                beschreibung="Zuschuss zur Miete.",
+                voraussetzungen="eigene Wohnung;geringes Einkommen",
+                zielgruppe="alle",
+                hoehe="abhängig von Einkommen"
+            ),
+            Foerderung(
+                name="Kindergeld",
+                beschreibung="Unterstützung für Familien.",
+                voraussetzungen="unter 25",
+                zielgruppe="familie",
+                hoehe="250€ monatlich"
+            )
+        ]
+
+        db.session.add_all(sample)
+        db.session.commit()
+
+
+# ----------------------------
+# HOME PAGE (LISTE AUS DB)
 # ----------------------------
 @app.route("/")
 def home():
+
+    foerderungen = Foerderung.query.all()
+
     html = """
     <html>
     <head>
-        <title>Förderungen Übersicht</title>
-
+        <title>Förderungen DB System</title>
         <style>
             body { font-family: Arial; max-width: 900px; margin: 40px auto; }
             .card { border:1px solid #ccc; padding:15px; margin:10px 0; border-radius:8px; }
-            input, select { padding:10px; margin:10px 0; width:100%; }
         </style>
-
-        <script>
-        function filterCards() {
-            let input = document.getElementById("search").value.toLowerCase();
-            let filter = document.getElementById("filter").value;
-            let cards = document.getElementsByClassName("card");
-
-            for (let i = 0; i < cards.length; i++) {
-                let text = cards[i].innerText.toLowerCase();
-                let tag = cards[i].getAttribute("data-tag");
-
-                let matchText = text.includes(input);
-                let matchFilter = (filter === "alle" || tag.includes(filter));
-
-                if (matchText && matchFilter) {
-                    cards[i].style.display = "block";
-                } else {
-                    cards[i].style.display = "none";
-                }
-            }
-        }
-        </script>
-
     </head>
-
     <body>
 
-        <h1>💸 Förderungen Finder</h1>
-
-        <input id="search" onkeyup="filterCards()" placeholder="🔍 Suche...">
-
-        <select id="filter" onchange="filterCards()">
-            <option value="alle">Alle</option>
-            <option value="student">Student</option>
-            <option value="azubi">Azubi</option>
-            <option value="familie">Familie</option>
-            <option value="beruf">Berufstätig</option>
-        </select>
+    <h1>💸 Förderungen Datenbank</h1>
+    <p>Alle Förderungen werden aus der Datenbank geladen.</p>
     """
 
     for f in foerderungen:
-        tags = " ".join(f["zielgruppe"])
+
+        voraus = f.voraussetzungen.split(";")
 
         html += f"""
-        <div class="card" data-tag="{tags}">
-            <h2>{f['name']}</h2>
-            <p>{f['beschreibung']}</p>
-            <p><b>Höhe:</b> {f['hoehe']}</p>
+        <div class="card">
+            <h2>{f.name}</h2>
+            <p>{f.beschreibung}</p>
+            <p><b>Höhe:</b> {f.hoehe}</p>
 
+            <p><b>Voraussetzungen:</b></p>
             <ul>
         """
 
-        for v in f["voraussetzungen"]:
+        for v in voraus:
             html += f"<li>{v}</li>"
 
         html += "</ul></div>"
@@ -124,6 +107,28 @@ def home():
     html += "</body></html>"
 
     return html
+
+
+# ----------------------------
+# ADD FOERDERUNG (für später Admin)
+# ----------------------------
+@app.route("/add", methods=["POST"])
+def add():
+
+    data = request.json
+
+    f = Foerderung(
+        name=data["name"],
+        beschreibung=data["beschreibung"],
+        voraussetzungen=";".join(data["voraussetzungen"]),
+        zielgruppe=data["zielgruppe"],
+        hoehe=data["hoehe"]
+    )
+
+    db.session.add(f)
+    db.session.commit()
+
+    return {"status": "ok"}
 
 
 # ----------------------------
