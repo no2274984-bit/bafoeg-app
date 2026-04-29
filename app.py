@@ -1,11 +1,37 @@
 from flask import Flask, request, send_file
 import os
-from markupsafe import escape
+import io
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-import io
+from markupsafe import escape
+import urllib.parse
 
 app = Flask(__name__)
+
+
+# ----------------------------
+# LOGIK: FÖRDERUNGEN
+# ----------------------------
+def check_bafoeg(age, status, income):
+    if status == "student" and age < 45 and income < 1500:
+        return ("hoch", "Du erfüllst die wichtigsten Voraussetzungen für BAföG.")
+    elif status == "student" and income < 2500:
+        return ("mittel", "Teilweise Voraussetzungen erfüllt.")
+    return ("gering", "BAföG aktuell eher unwahrscheinlich.")
+
+
+def check_wohngeld(living, income):
+    if living in ["allein", "wg"] and income < 2000:
+        return ("hoch", "Wohngeld sehr wahrscheinlich möglich.")
+    elif income < 3000:
+        return ("mittel", "Wohngeld könnte möglich sein.")
+    return ("gering", "Wohngeld eher unwahrscheinlich.")
+
+
+def check_kindergeld(age):
+    if age < 25:
+        return ("hoch", "Kindergeld steht dir wahrscheinlich zu.")
+    return ("gering", "Kein Anspruch auf Kindergeld.")
 
 
 # ----------------------------
@@ -15,29 +41,30 @@ app = Flask(__name__)
 def home():
     return """
     <html>
-    <head>
-        <title>BAföG Assistent</title>
-        <style>
-            body { font-family: Arial; max-width: 650px; margin: 50px auto; }
-            input { width: 100%; padding: 10px; margin: 6px 0; }
-            button { width: 100%; padding: 12px; background: black; color: white; border: none; }
-        </style>
-    </head>
-    <body>
+    <body style="font-family: Arial; max-width:700px; margin:40px auto;">
+    
+    <h1>🎯 Förderungs-Checker</h1>
+    <p>Finde heraus, welche staatlichen Förderungen du bekommen kannst.</p>
 
-        <h1>BAföG Assistent</h1>
+    <form action="/result" method="post">
+        <input name="age" placeholder="Alter" required><br><br>
 
-        <form action="/submit" method="post">
-            <input name="age" placeholder="Alter *" required>
-            <input name="study" placeholder="Studiengang *" required>
-            <input name="semester" placeholder="Semester *" required>
+        <select name="status">
+            <option value="student">Student</option>
+            <option value="ausbildung">Ausbildung</option>
+            <option value="arbeit">Arbeit</option>
+        </select><br><br>
 
-            <input name="job" placeholder="Nebenjob (ja/nein)">
-            <input name="income" placeholder="Einkommen (€)">
-            <input name="living" placeholder="Wohnsituation">
+        <input name="income" placeholder="Monatliches Einkommen (€)" required><br><br>
 
-            <button type="submit">Antrag erstellen</button>
-        </form>
+        <select name="living">
+            <option value="bei_eltern">Bei Eltern</option>
+            <option value="allein">Allein</option>
+            <option value="wg">WG</option>
+        </select><br><br>
+
+        <button>Check starten</button>
+    </form>
 
     </body>
     </html>
@@ -45,70 +72,66 @@ def home():
 
 
 # ----------------------------
-# SUBMIT
+# RESULT
 # ----------------------------
-@app.route("/submit", methods=["POST"])
-def submit():
-
-    age = request.form.get("age")
-    study = request.form.get("study")
-    semester = request.form.get("semester")
-    job = (request.form.get("job") or "").lower()
-    income = request.form.get("income") or ""
-    living = request.form.get("living") or "nicht angegeben"
-
-    if not age or not study or not semester:
-        return "Pflichtfelder fehlen"
+@app.route("/result", methods=["POST"])
+def result():
 
     try:
-        age = int(age)
+        age = int(request.form.get("age"))
+        income = float(request.form.get("income").replace(",", "."))
     except:
-        return "Alter muss Zahl sein"
+        return "Eingaben ungültig"
 
-    job_text = "Nebenjob: Ja" if job in ["ja", "yes"] else "Nebenjob: Nein"
+    status = request.form.get("status")
+    living = request.form.get("living")
 
-    if income:
-        try:
-            income_val = float(income.replace(",", "."))
-            income_text = f"Einkommen: {income_val:.2f} €"
-        except:
-            return "Einkommen ungültig"
-    else:
-        income_text = "Kein Einkommen angegeben"
+    # Förderungen prüfen
+    results = []
 
-    result = f"""
-BAföG ANTRAG
+    b = check_bafoeg(age, status, income)
+    results.append(("BAföG", b))
 
-Alter: {age}
-Studium: {study}
-Semester: {semester}
+    w = check_wohngeld(living, income)
+    results.append(("Wohngeld", w))
 
-{job_text}
-{income_text}
+    k = check_kindergeld(age)
+    results.append(("Kindergeld", k))
 
-Wohnsituation: {living}
-"""
+    # HTML bauen
+    output = ""
+    text_for_pdf = "FÖRDERUNGS-CHECK\n\n"
 
-    safe_result = escape(result)
+    for name, (level, text) in results:
+        color = {"hoch": "green", "mittel": "orange", "gering": "red"}[level]
 
-    # Übergabe an Download via Query (einfach & stateless)
-    import urllib.parse
-    encoded = urllib.parse.quote(result)
+        output += f"""
+        <div style="border:1px solid #ccc; padding:15px; margin:10px 0;">
+            <h3>{name}</h3>
+            <p style="color:{color}; font-weight:bold;">{level.upper()}</p>
+            <p>{text}</p>
+        </div>
+        """
+
+        text_for_pdf += f"{name}: {level.upper()}\n{text}\n\n"
+
+    safe_output = escape(text_for_pdf)
+    encoded = urllib.parse.quote(text_for_pdf)
 
     return f"""
     <html>
-    <body style="font-family: Arial; max-width: 700px; margin: 40px auto;">
+    <body style="font-family: Arial; max-width:700px; margin:40px auto;">
 
-        <h2>Dein Antrag</h2>
+    <h2>🔍 Deine Ergebnisse</h2>
 
-        <pre>{safe_result}</pre>
+    {output}
 
-        <a href="/download?data={encoded}">
-            <button>📄 Als PDF herunterladen</button>
-        </a>
+    <a href="/download?data={encoded}">
+        <button>📄 Als PDF herunterladen</button>
+    </a>
 
-        <br><br>
-        <a href="/">Zurück</a>
+    <br><br>
+    <a href="/">Neu starten</a>
 
     </body>
     </html>
@@ -116,7 +139,7 @@ Wohnsituation: {living}
 
 
 # ----------------------------
-# DOWNLOAD (IN MEMORY)
+# PDF DOWNLOAD
 # ----------------------------
 @app.route("/download")
 def download():
@@ -133,17 +156,12 @@ def download():
     c.save()
     buffer.seek(0)
 
-    return send_file(
-        buffer,
-        as_attachment=True,
-        download_name="bafoeg_antrag.pdf",
-        mimetype="application/pdf"
-    )
+    return send_file(buffer, as_attachment=True, download_name="foerderung.pdf")
 
 
 # ----------------------------
 # START
 # ----------------------------
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # Render nutzt oft 10000
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
