@@ -1,162 +1,117 @@
-from flask import Flask, request, send_file
+from flask import Flask
 import os
-import io
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from markupsafe import escape
-import urllib.parse
 
 app = Flask(__name__)
 
+# ----------------------------
+# DATENBANK (EINFACH ALS LISTE)
+# ----------------------------
+foerderungen = [
+    {
+        "name": "BAföG",
+        "beschreibung": "Finanzielle Unterstützung für Studierende.",
+        "voraussetzungen": [
+            "Im Studium oder schulischer Ausbildung",
+            "Unter 45 Jahre",
+            "Geringes Einkommen",
+            "Deutsche Staatsbürgerschaft oder Aufenthaltstitel"
+        ],
+        "hoehe": "Bis zu ca. 934€ monatlich"
+    },
+    {
+        "name": "Wohngeld",
+        "beschreibung": "Zuschuss zur Miete.",
+        "voraussetzungen": [
+            "Eigene Wohnung",
+            "Geringes Einkommen",
+            "Kein BAföG-Bezug"
+        ],
+        "hoehe": "Abhängig von Miete und Einkommen"
+    },
+    {
+        "name": "Kindergeld",
+        "beschreibung": "Monatliche Zahlung für Kinder.",
+        "voraussetzungen": [
+            "Unter 25 Jahre (bei Ausbildung/Studium)",
+            "Eltern erhalten Zahlung"
+        ],
+        "hoehe": "250€ pro Monat"
+    },
+    {
+        "name": "Bürgergeld",
+        "beschreibung": "Grundsicherung für Arbeitssuchende.",
+        "voraussetzungen": [
+            "Erwerbsfähig",
+            "Geringes oder kein Einkommen",
+            "Wohnsitz in Deutschland"
+        ],
+        "hoehe": "Regelsatz + Unterkunftskosten"
+    }
+]
+
 
 # ----------------------------
-# LOGIK: FÖRDERUNGEN
-# ----------------------------
-def check_bafoeg(age, status, income):
-    if status == "student" and age < 45 and income < 1500:
-        return ("hoch", "Du erfüllst die wichtigsten Voraussetzungen für BAföG.")
-    elif status == "student" and income < 2500:
-        return ("mittel", "Teilweise Voraussetzungen erfüllt.")
-    return ("gering", "BAföG aktuell eher unwahrscheinlich.")
-
-
-def check_wohngeld(living, income):
-    if living in ["allein", "wg"] and income < 2000:
-        return ("hoch", "Wohngeld sehr wahrscheinlich möglich.")
-    elif income < 3000:
-        return ("mittel", "Wohngeld könnte möglich sein.")
-    return ("gering", "Wohngeld eher unwahrscheinlich.")
-
-
-def check_kindergeld(age):
-    if age < 25:
-        return ("hoch", "Kindergeld steht dir wahrscheinlich zu.")
-    return ("gering", "Kein Anspruch auf Kindergeld.")
-
-
-# ----------------------------
-# HOME
+# HOME (ÜBERSICHT)
 # ----------------------------
 @app.route("/")
 def home():
-    return """
+
+    html = """
     <html>
-    <body style="font-family: Arial; max-width:700px; margin:40px auto;">
-    
-    <h1>🎯 Förderungs-Checker</h1>
-    <p>Finde heraus, welche staatlichen Förderungen du bekommen kannst.</p>
+    <head>
+        <title>Förderungen Überblick</title>
+        <style>
+            body {
+                font-family: Arial;
+                max-width: 800px;
+                margin: 40px auto;
+            }
 
-    <form action="/result" method="post">
-        <input name="age" placeholder="Alter" required><br><br>
+            .card {
+                border: 1px solid #ccc;
+                padding: 20px;
+                margin-bottom: 20px;
+                border-radius: 8px;
+            }
 
-        <select name="status">
-            <option value="student">Student</option>
-            <option value="ausbildung">Ausbildung</option>
-            <option value="arbeit">Arbeit</option>
-        </select><br><br>
+            h2 {
+                margin-bottom: 5px;
+            }
 
-        <input name="income" placeholder="Monatliches Einkommen (€)" required><br><br>
+            ul {
+                margin-top: 10px;
+            }
+        </style>
+    </head>
 
-        <select name="living">
-            <option value="bei_eltern">Bei Eltern</option>
-            <option value="allein">Allein</option>
-            <option value="wg">WG</option>
-        </select><br><br>
+    <body>
 
-        <button>Check starten</button>
-    </form>
-
-    </body>
-    </html>
+        <h1>💸 Staatliche Förderungen in Deutschland</h1>
+        <p>Hier findest du eine Übersicht über wichtige Zuschüsse und deren Voraussetzungen.</p>
     """
 
+    for f in foerderungen:
+        html += f"""
+        <div class="card">
+            <h2>{f['name']}</h2>
+            <p><b>Beschreibung:</b> {f['beschreibung']}</p>
+            <p><b>Höhe:</b> {f['hoehe']}</p>
 
-# ----------------------------
-# RESULT
-# ----------------------------
-@app.route("/result", methods=["POST"])
-def result():
-
-    try:
-        age = int(request.form.get("age"))
-        income = float(request.form.get("income").replace(",", "."))
-    except:
-        return "Eingaben ungültig"
-
-    status = request.form.get("status")
-    living = request.form.get("living")
-
-    # Förderungen prüfen
-    results = []
-
-    b = check_bafoeg(age, status, income)
-    results.append(("BAföG", b))
-
-    w = check_wohngeld(living, income)
-    results.append(("Wohngeld", w))
-
-    k = check_kindergeld(age)
-    results.append(("Kindergeld", k))
-
-    # HTML bauen
-    output = ""
-    text_for_pdf = "FÖRDERUNGS-CHECK\n\n"
-
-    for name, (level, text) in results:
-        color = {"hoch": "green", "mittel": "orange", "gering": "red"}[level]
-
-        output += f"""
-        <div style="border:1px solid #ccc; padding:15px; margin:10px 0;">
-            <h3>{name}</h3>
-            <p style="color:{color}; font-weight:bold;">{level.upper()}</p>
-            <p>{text}</p>
-        </div>
+            <p><b>Voraussetzungen:</b></p>
+            <ul>
         """
 
-        text_for_pdf += f"{name}: {level.upper()}\n{text}\n\n"
+        for v in f["voraussetzungen"]:
+            html += f"<li>{v}</li>"
 
-    safe_output = escape(text_for_pdf)
-    encoded = urllib.parse.quote(text_for_pdf)
+        html += "</ul></div>"
 
-    return f"""
-    <html>
-    <body style="font-family: Arial; max-width:700px; margin:40px auto;">
-
-    <h2>🔍 Deine Ergebnisse</h2>
-
-    {output}
-
-    <a href="/download?data={encoded}">
-        <button>📄 Als PDF herunterladen</button>
-    </a>
-
-    <br><br>
-    <a href="/">Neu starten</a>
-
+    html += """
     </body>
     </html>
     """
 
-
-# ----------------------------
-# PDF DOWNLOAD
-# ----------------------------
-@app.route("/download")
-def download():
-    data = request.args.get("data", "")
-
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-
-    y = 800
-    for line in data.split("\n"):
-        c.drawString(50, y, line)
-        y -= 20
-
-    c.save()
-    buffer.seek(0)
-
-    return send_file(buffer, as_attachment=True, download_name="foerderung.pdf")
+    return html
 
 
 # ----------------------------
