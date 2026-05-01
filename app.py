@@ -71,6 +71,14 @@ with app.app_context():
 
 
 # ----------------------------
+# ROOT FIX (WICHTIG!)
+# ----------------------------
+@app.route("/")
+def home():
+    return redirect("/login")
+
+
+# ----------------------------
 # UI TEMPLATE
 # ----------------------------
 BASE_HTML = """
@@ -200,3 +208,10 @@ def apply(id):
 def logout():
     session.clear()
     return redirect("/login")
+
+
+# ----------------------------
+# LOCAL START (optional)
+# ----------------------------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
